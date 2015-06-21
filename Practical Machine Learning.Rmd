@@ -1,0 +1,149 @@
+---
+title: "Practical Machine Learning"
+author: "By Marc Chan"
+date: "June 21, 2015"
+output: html_document
+---
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data Sources
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+##Objective
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+1. Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+2. You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details. 
+
+##Methodoloy
+
+For our dataset, the resulting outcome is a classe variables with 5 factors. Each of these class are defined as follows:
+
+-Class A: exactly according to the specification  
+-Class B: throwing the elbows to the front  
+-Class C: lifting the dumbbell only halfway  
+-Class D: lowering the dumbbell only halfway  
+-Class E: throwing the hips to the front  
+
+My approach is to test using the decision tree and random forest algorithms. The testing will be done with 60% volume to training data and 40% to testing data.
+
+###Loading the Data
+The first step is to load the dat and the appropriate packages for this exercise. For reproducilbility, I set the seed = 6.
+
+```{r}
+##install.packages("caret")
+##install.packages("AppliedPredictiveModeling")
+##install.packages("rattle")
+##install.packages("rpart.plot")
+##install.packages("randomForest")
+library(AppliedPredictiveModeling)
+library(caret)
+library(rattle)
+library(rpart.plot)
+library(randomForest)
+library(RCurl)
+set.seed(6)
+```
+
+
+We must first load and clean the test and training data sets. This includes removing NA values from our rows as well as deleting any columns that have non-zero varaiances.
+
+
+```{r}
+# Download data.
+url_training<- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+data_training <- read.csv(url_training, na.strings=c("NA","#DIV/0!", ""))
+
+url_test <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+data_test <- read.csv(url_test, na.strings=c("NA","#DIV/0!", ""))
+
+# Delete columns with all missing values and variables with non zero variance
+data_training<-data_training[,colSums(is.na(data_training)) == 0]
+data_test <-data_test[,colSums(is.na(data_test)) == 0]
+
+data_training <-data_training[,-c(1:7)]
+data_test <-data_test[,-c(1:7)]
+```
+
+##Splitting the data set for cross validation
+
+To conduct cross-validation we will subset the training data set: sub_training (60%) and sub_test (40%).
+
+
+```{r}
+sub_samples <- createDataPartition(y=data_training$classe, p=0.6, list=FALSE)
+sub_training <- data_training[sub_samples, ] 
+sub_test<- data_training[-sub_samples, ]
+```
+
+Here's a frequency plot of our classe variable. Here you can see that the frequency of each level is at least 2,000.
+
+
+```{r}
+plot(sub_training$classe, col="black", main="Frequency Plot of Levels in Sub_Training Data", xlab="classe levels", ylab="Frequency")
+```
+
+
+###Decision Tree Model
+
+```{r}
+DT_model <- rpart(classe ~ ., data=sub_training, method="class")
+prediction_DT <- predict(DT_model, sub_test, type = "class")
+
+# Plot of the Decision Tree
+rpart.plot(DT_model, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+```
+
+
+```{r}
+# Test results on sub_test set
+confusionMatrix(prediction_DT, sub_test$classe)
+```
+
+###Random Forest Model
+
+```{r}
+rF_model <- randomForest(classe ~. , data=sub_training, method="class")
+prediction_rF <- predict(rF_model, sub_test, type = "class")
+
+# Test results on sub_test set
+confusionMatrix(prediction_rF, sub_test$classe)
+```
+
+###Conclusion
+
+As you can see, the Random Forest algorithm performed better than Decision Trees.
+Accuracy for Random Forest model was 0.993 (95% CI: (0.9907, 0.9946)) compared to our Decision Tree model that is 0.74 (95% CI: (0.73, 0.74)). The accuracy of the Random Forest model is 0.993 with a out-of-sample error is .07%. This is incredibly reliable to avoiding mis-classification of our predictions.
+
+###Prediction
+
+```{r}
+# predict outcome levels on the original Testing data set using Random Forest algorithm
+predictfinal <- predict(rF_model, data_test, type="class")
+predictfinal
+```
+
+Code for submission predictions.
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictfinal)
+```
+
+
